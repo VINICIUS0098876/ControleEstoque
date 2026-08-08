@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create *)",
+      "Bash(npm install *)",
+      "Bash(npm audit *)",
+      "Bash(npm view *)",
+      "Bash(npm ls *)",
+      "Bash(npx shadcn@latest init --help)",
+      "Bash(npx shadcn@latest init -t vite -b radix -y)",
+      "Bash(npx shadcn@latest add button input label card table dialog dropdown-menu select form sonner badge separator avatar tabs alert-dialog skeleton -y)",
+      "Bash(npx shadcn@latest add form -y)",
+      "Bash(npx shadcn@latest add form -y --overwrite)",
+      "Bash(npx shadcn@latest search)",
+      "Bash(npx shadcn@latest add @shadcn/form -y)",
+      "Bash(npx shadcn@latest add @shadcn/form -y --verbose)",
+      "Bash(npx shadcn@latest view @shadcn/form)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

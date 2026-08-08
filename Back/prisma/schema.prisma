@@ -1,0 +1,171 @@
+// ------------------------------------------------------
+// CONFIGURAÇÃO DO BANCO E DO CLIENTE
+// ------------------------------------------------------
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ------------------------------------------------------
+// TABELAS DO SISTEMA (MULTI-TENANT COM SOFT DELETE)
+// ------------------------------------------------------
+
+// Papel do usuário dentro da empresa. ADMIN é sempre o dono, criado junto com a
+// empresa (ver CreateEmpresaService); FUNCIONARIO é criado pelo ADMIN (ver
+// CreateFuncionarioService) e nunca a partir de dado vindo do body da requisição.
+enum Papel {
+  ADMIN
+  FUNCIONARIO
+}
+
+// 1. Tabela da Empresa (O "Tenant")
+model Empresa {
+  id      String  @id @default(uuid()) @db.Uuid
+  nome    String
+  cnpj    String? @unique
+  logoUrl String?
+  temaCor String? @default("#000000")
+
+  // Campos de Soft Delete para a Empresa (Ex: Cancelou a assinatura)
+  ativo      Boolean   @default(true)
+  deletadoEm DateTime?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  usuarios      Usuario[]
+  produtos      Produto[]
+  categorias    Categoria[]
+  movimentacoes Movimentacao[]
+}
+
+// 2. Tabela de Usuários (Donos e Funcionários)
+model Usuario {
+  id    String @id @default(uuid()) @db.Uuid
+  email String @unique
+  senha String
+  nome  String
+  papel Papel  @default(ADMIN)
+
+  empresaId String  @db.Uuid
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  refreshTokens RefreshToken[]
+  movimentacoes Movimentacao[]
+
+  // Campos de Soft Delete (Ex: Funcionário foi demitido)
+  ativo      Boolean   @default(true)
+  deletadoEm DateTime?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // Toda listagem/checagem de usuário é escopada por empresa (ver ListUsuarioService).
+  @@index([empresaId])
+}
+
+// 3. Tabela de Produtos
+model Produto {
+  id              String  @id @default(uuid()) @db.Uuid
+  nome            String
+  codigoBarras    String?
+  sku             String? // Novo: Código interno da loja (Ex: CAM-PRETA-M)
+  descricao       String?
+  unidadeMedida   String  @default("UN") // Novo: UN, KG, CX, L, etc
+  precoCusto      Decimal @db.Decimal(10, 2)
+  precoVenda      Decimal @db.Decimal(10, 2)
+  quantidadeAtual Int     @default(0)
+  estoqueMinimo   Int     @default(5)
+  imagemUrl       String?
+
+  empresaId String  @db.Uuid
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  categoriaId String?    @db.Uuid // Novo: Relacionamento com Categoria (opcional)
+  categoria   Categoria? @relation(fields: [categoriaId], references: [id])
+
+  // Campos de Soft Delete (Ex: Produto saiu de linha)
+  ativo      Boolean   @default(true)
+  deletadoEm DateTime?
+
+  movimentacoes Movimentacao[]
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // Garante no banco (não só na aplicação) que dois produtos ativos da mesma empresa não
+  // dividam SKU/código de barras — evita duplicata em caso de duas criações concorrentes.
+  // Nulos não conflitam entre si (comportamento padrão do Postgres), então produtos sem
+  // SKU/código de barras não são afetados. Ao soft-deletar um produto (ver
+  // DeleteProdutoService), sku/codigoBarras são zerados para liberar o identificador.
+  @@unique([empresaId, sku])
+  @@unique([empresaId, codigoBarras])
+  // Cobre a listagem/filtro por empresa+status (ListProdutoService, sempre filtrado por
+  // ambos) e o filtro opcional por categoria.
+  @@index([empresaId, ativo])
+  @@index([categoriaId])
+}
+
+// 4. Tabela de Movimentações (Histórico Imutável)
+model Movimentacao {
+  id         String  @id @default(uuid()) @db.Uuid
+  tipo       String // "ENTRADA", "SAIDA", "ESTORNO"
+  quantidade Int
+  motivo     String? // Ex: "Venda PDV", "Ajuste manual", "Entrada de NF-e via IA"
+
+  produtoId String  @db.Uuid
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  empresaId String  @db.Uuid
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  usuarioId String?  @db.Uuid // Novo: Quem fez a movimentação (nulo caso seja via sistema automátco)
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  criadoEm DateTime @default(now())
+
+  // ListMovimentacaoService filtra por produtoId (+empresaId) e ordena por criadoEm desc.
+  @@index([produtoId, criadoEm])
+  @@index([empresaId])
+}
+
+// 5. Tabela de Refresh Tokens
+model RefreshToken {
+  id        String @id @default(uuid()) @db.Uuid
+  expiresIn Int // Vamos guardar o tempo de expiração em formato Unix Timestamp (segundos)
+
+  usuarioId String  @db.Uuid
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  criadoEm DateTime @default(now())
+
+  // LoginService/DeleteUserService invalidam tokens de um usuário via deleteMany({usuarioId}).
+  @@index([usuarioId])
+}
+
+// Nova Tabela: Categorias para organizar os produtos
+model Categoria {
+  id   String @id @default(uuid()) @db.Uuid
+  nome String
+
+  empresaId String    @db.Uuid
+  empresa   Empresa   @relation(fields: [empresaId], references: [id])
+  produtos  Produto[]
+
+  ativo      Boolean   @default(true)
+  deletadoEm DateTime?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // ListCategoriaService/serviços de produto filtram sempre por empresa+status.
+  @@index([empresaId, ativo])
+  // Um índice único parcial (só sobre linhas com ativo = true) garante no banco que duas
+  // categorias ATIVAS da mesma empresa não dividam nome, mesmo sob criação concorrente
+  // (race condition entre o findFirst de checagem e o create/update no service). O Prisma
+  // não tem sintaxe própria pra índice único parcial, então ele foi criado via SQL puro
+  // na migration add_categoria_nome_ativo_unique_index (não aparece como @@unique aqui).
+}

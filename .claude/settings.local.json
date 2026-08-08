@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prisma *)",
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)",
+      "Bash(chromium-cli --version)",
+      "Bash(node visual-check.mjs)",
+      "Bash(curl *)",
+      "Bash(node visual-check-auth.mjs)",
+      "Bash(rm -rf \"C:\\\\Users\\\\Juninho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Juninho-Documents-ControleEstoque\\\\c2571a4e-645a-4fe3-9b63-66a5609c5909\\\\scratchpad\\\\node_modules\" \"C:\\\\Users\\\\Juninho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Juninho-Documents-ControleEstoque\\\\c2571a4e-645a-4fe3-9b63-66a5609c5909\\\\scratchpad\\\\package.json\" \"C:\\\\Users\\\\Juninho\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Juninho-Documents-ControleEstoque\\\\c2571a4e-645a-4fe3-9b63-66a5609c5909\\\\scratchpad\\\\package-lock.json\")",
+      "Bash(netstat -ano)",
+      "Bash(node visual-check-features.mjs)",
+      "Bash(node visual-check-fix.mjs)",
+      "Bash(npx oxlint *)",
+      "Bash(rm -f cookies.txt visual-check-features.mjs visual-check-fix.mjs visual-check.mjs visual-check-auth.mjs *.png)",
+      "Bash(rm -rf node_modules package.json package-lock.json)",
+      "Bash(npm run *)"
+    ]
+  }
+}
