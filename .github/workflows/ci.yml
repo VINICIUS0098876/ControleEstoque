@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Back (typecheck + testes)
+    runs-on: ubuntu-latest
+    # Valores fixos e sem valor real: nenhum teste abre conexão de verdade com o banco
+    # (services usam prismaClient mockado via vi.mock — ver Back/src/services/*.test.ts).
+    # env.ts só exige que essas variáveis existam e tenham o formato certo (ver
+    # Back/src/conf/env.ts); DATABASE_URL/DIRECT_URL nunca são realmente resolvidas.
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+      SECRET_KEY: ci-only-secret-key-not-used-in-production-32chars
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: Back
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Back/package-lock.json
+
+      - run: npm ci
+
+      # Gera o Prisma Client a partir do schema — não precisa de banco alcançável pra isso.
+      - run: npx prisma generate
+
+      - run: npm run build
+
+      - run: npm test
+
+  frontend:
+    name: Front (lint + typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Front
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: Front/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # tsc -b + vite build (mesmo comando usado pra gerar o build de produção).
+      - run: npm run build
+
+  # A suíte e2e (Front/e2e, Playwright) não roda em CI de propósito: ela bate contra um
+  # Back e um Postgres reais (ver Front/playwright.config.ts), o que exigiria provisionar
+  # um banco de teste dedicado e segredos de CI — decisão que fica pra quando isso for
+  # necessário, não algo pra resolver por padrão aqui.
