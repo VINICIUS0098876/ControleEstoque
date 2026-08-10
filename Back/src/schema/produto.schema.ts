@@ -70,7 +70,10 @@ export const produtoIdParamSchema = z.object({
 
 export const listProdutoQuerySchema = z.object({
     query: z.object({
-        nome: z.string().trim().max(255).optional(),
+        // Casa contra nome, SKU e código de barras (ver ListProdutoService) — um único
+        // campo de busca serve tanto a tela de Produtos (busca por nome) quanto o PDV
+        // (que precisa achar um produto pelo código lido por um leitor de código de barras).
+        busca: z.string().trim().max(255).optional(),
         categoriaId: z.string().uuid({ message: "O id da categoria é inválido." }).optional(),
         estoqueBaixo: z.enum(['true', 'false']).optional(),
         page: z.string().regex(/^\d+$/, { message: "page deve ser um número inteiro positivo." }).optional(),

@@ -12,7 +12,31 @@ const envSchema = z.object({
     // mais alto, sem depender do valor pensado pra proteção real de força bruta em produção
     // — nunca setada fora desse cenário, então o padrão de produção não muda.
     AUTH_RATE_LIMIT_MAX: z.string().regex(/^\d+$/, { message: 'AUTH_RATE_LIMIT_MAX deve ser um número.' }).optional(),
+    // Usadas pelo fluxo de "esqueci minha senha" (ver services/email.ts). Opcionais fora de
+    // produção: sem elas, o e-mail de redefinição é só logado no console (ver
+    // isEmailProviderConfigured em services/email.ts), o que permite rodar o projeto
+    // localmente sem precisar de uma conta Resend.
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_FROM_EMAIL: z.string().optional(),
+    // URL pública do front, usada para montar o link de redefinição de senha
+    // (ex: `${FRONTEND_URL}/redefinir-senha?token=...`).
+    FRONTEND_URL: z.string().optional(),
 })
+    // Em produção, o fallback de "logar no console" não existe — se o e-mail de
+    // redefinição de senha não puder ser enviado de verdade, isso precisa quebrar o boot,
+    // não falhar silenciosamente na primeira requisição de um usuário em produção.
+    .refine((data) => data.NODE_ENV !== 'production' || !!data.RESEND_API_KEY, {
+        message: 'RESEND_API_KEY é obrigatória em produção (necessária para enviar e-mail de redefinição de senha).',
+        path: ['RESEND_API_KEY'],
+    })
+    .refine((data) => data.NODE_ENV !== 'production' || !!data.RESEND_FROM_EMAIL, {
+        message: 'RESEND_FROM_EMAIL é obrigatória em produção.',
+        path: ['RESEND_FROM_EMAIL'],
+    })
+    .refine((data) => data.NODE_ENV !== 'production' || !!data.FRONTEND_URL, {
+        message: 'FRONTEND_URL é obrigatória em produção (usada para montar o link de redefinição de senha).',
+        path: ['FRONTEND_URL'],
+    })
 
 // Validado uma única vez no boot: se faltar ou for inválida alguma variável de
 // ambiente crítica, a aplicação falha aqui (com uma mensagem clara) em vez de

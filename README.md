@@ -25,6 +25,12 @@ shadcn/ui + Tailwind, testes end-to-end com Playwright.
   `deletadoEm`, preservando histórico e permitindo reativação.
 - **Movimentação como histórico imutável**: o estoque de um produto só muda através de
   uma `Movimentacao` (entrada/saída/estorno); não existe update direto de quantidade.
+- **Redefinição de senha por e-mail**: autoatendimento via `POST /user/forgot-password` +
+  `POST /user/reset-password` (`Back/src/services/usuario.ts`), com token de posse
+  (hash SHA-256 salvo, nunca o valor em texto plano) expirando em 30 minutos e resposta
+  idêntica exista ou não o e-mail informado, para não revelar quais contas existem. O
+  envio é feito via Resend (`Back/src/services/email.ts`); sem `RESEND_API_KEY`
+  configurada, o e-mail é apenas logado no console (só funciona fora de produção).
 
 ## Estrutura
 
@@ -47,6 +53,11 @@ npm install
 npx prisma migrate deploy # aplica as migrations existentes no banco
 npm run dev                # http://localhost:3000
 ```
+
+`RESEND_API_KEY`, `RESEND_FROM_EMAIL` e `FRONTEND_URL` (usadas pelo fluxo de "esqueci
+minha senha") são opcionais em desenvolvimento — sem elas, o e-mail de redefinição é só
+logado no console em vez de enviado de verdade. Em produção, `Back/src/conf/env.ts` exige
+as três no boot.
 
 ### Front
 

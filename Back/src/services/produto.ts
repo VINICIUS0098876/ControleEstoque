@@ -237,7 +237,7 @@ export class GetProdutoService{
 type ProdutoOrdenavel = 'nome' | 'precoVenda' | 'quantidadeAtual' | 'criadoEm';
 
 interface ListProdutoFiltros{
-    nome?: string | undefined;
+    busca?: string | undefined;
     categoriaId?: string | undefined;
     estoqueBaixo?: boolean | undefined;
     page?: number | undefined;
@@ -264,10 +264,23 @@ export class ListProdutoService{
         const sortBy: ProdutoOrdenavel = filtros.sortBy ?? 'nome'
         const sortOrder: 'asc' | 'desc' = filtros.sortOrder ?? 'asc'
 
+        // `busca` casa contra nome, SKU e código de barras — usado tanto pela busca por
+        // nome da tela de Produtos quanto pelo PDV, que precisa achar um produto pelo
+        // código lido por um leitor de código de barras (ou digitado manualmente).
+        const buscaWhere = filtros.busca
+            ? {
+                OR: [
+                    { nome: { contains: filtros.busca, mode: 'insensitive' as const } },
+                    { sku: { contains: filtros.busca, mode: 'insensitive' as const } },
+                    { codigoBarras: { contains: filtros.busca, mode: 'insensitive' as const } },
+                ],
+            }
+            : {}
+
         const where = {
             empresaId: empresaId,
             ativo: true,
-            ...(filtros.nome ? { nome: { contains: filtros.nome, mode: 'insensitive' as const } } : {}),
+            ...buscaWhere,
             ...(filtros.categoriaId ? { categoriaId: filtros.categoriaId } : {}),
         }
 
@@ -283,8 +296,9 @@ export class ListProdutoService{
                 Prisma.sql`"quantidadeAtual" <= "estoqueMinimo"`
             ]
 
-            if(filtros.nome){
-                condicoes.push(Prisma.sql`"nome" ILIKE ${'%' + filtros.nome + '%'}`)
+            if(filtros.busca){
+                const termo = '%' + filtros.busca + '%'
+                condicoes.push(Prisma.sql`("nome" ILIKE ${termo} OR "sku" ILIKE ${termo} OR "codigoBarras" ILIKE ${termo})`)
             }
 
             if(filtros.categoriaId){

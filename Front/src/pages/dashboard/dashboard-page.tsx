@@ -1,18 +1,21 @@
 import type { LucideIcon } from "lucide-react"
 import type { ReactNode } from "react"
 import { Link } from "react-router-dom"
-import { AlertTriangle, Boxes, DollarSign, RefreshCw, TrendingUp } from "lucide-react"
+import { AlertTriangle, Boxes, DollarSign, HandCoins, Receipt, RefreshCw, TrendingUp, Wallet } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { ErrorState } from "@/components/error-state"
 import { Sparkline } from "@/components/sparkline"
-import { useDashboard } from "@/hooks/use-dashboard"
+import { useDashboard, useProdutosMaisVendidos } from "@/hooks/use-dashboard"
 import { useDocumentTitle } from "@/hooks/use-document-title"
 import { formatCurrency } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/stores/auth-store"
 import { MovimentacoesChart } from "@/pages/dashboard/movimentacoes-chart"
+import { VendasChart } from "@/pages/dashboard/vendas-chart"
+
+const DIAS_MAIS_VENDIDOS = 30
 
 interface StatCardProps {
   title: string
@@ -92,16 +95,48 @@ export function DashboardPage() {
   useDocumentTitle("Dashboard")
 
   const usuario = useAuthStore((s) => s.usuario)
-  const { estoqueBaixo, valorEstoque } = useDashboard()
+  const { estoqueBaixo, valorEstoque, vendas, fiado } = useDashboard()
+  const maisVendidos = useProdutosMaisVendidos(DIAS_MAIS_VENDIDOS, 5)
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Olá, {usuario?.nome?.split(" ")[0]}</h1>
-        <p className="text-sm text-muted-foreground">Resumo do estoque da sua empresa.</p>
+        <p className="text-sm text-muted-foreground">Resumo de vendas e estoque da sua empresa.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          title="Faturamento hoje"
+          icon={Wallet}
+          isLoading={vendas.isLoading}
+          isError={vendas.isError}
+          onRetry={() => vendas.refetch()}
+          value={formatCurrency(vendas.data?.faturamentoHoje ?? 0)}
+          tendencia={vendas.data?.tendenciaFaturamento.map((dia) => dia.total)}
+          to="/vendas"
+        />
+
+        <StatCard
+          title="Vendas hoje"
+          icon={Receipt}
+          isLoading={vendas.isLoading}
+          isError={vendas.isError}
+          onRetry={() => vendas.refetch()}
+          value={vendas.data?.quantidadeVendasHoje ?? 0}
+          to="/vendas"
+        />
+
+        <StatCard
+          title="Fiado a receber"
+          icon={HandCoins}
+          isLoading={fiado.isLoading}
+          isError={fiado.isError}
+          onRetry={() => fiado.refetch()}
+          value={formatCurrency(fiado.data?.totalReceber ?? 0)}
+          to="/clientes"
+        />
+
         <StatCard
           title="Produtos cadastrados"
           icon={Boxes}
@@ -146,40 +181,82 @@ export function DashboardPage() {
         />
       </div>
 
+      <VendasChart />
+
       <MovimentacoesChart />
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Produtos com estoque baixo</CardTitle>
-          <Button asChild variant="link" size="sm" className="text-brand">
-            <Link to="/produtos">Ver todos</Link>
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-1">
-          {estoqueBaixo.isLoading && <Skeleton className="h-24 w-full" />}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Produtos com estoque baixo</CardTitle>
+            <Button asChild variant="link" size="sm" className="text-brand">
+              <Link to="/produtos">Ver todos</Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {estoqueBaixo.isLoading && <Skeleton className="h-24 w-full" />}
 
-          {estoqueBaixo.isError && <ErrorState onRetry={() => estoqueBaixo.refetch()} />}
+            {estoqueBaixo.isError && <ErrorState onRetry={() => estoqueBaixo.refetch()} />}
 
-          {!estoqueBaixo.isLoading && !estoqueBaixo.isError && estoqueBaixo.data?.produtos.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Nenhum produto com estoque baixo. 🎉
-            </p>
-          )}
+            {!estoqueBaixo.isLoading && !estoqueBaixo.isError && estoqueBaixo.data?.produtos.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Nenhum produto com estoque baixo. 🎉
+              </p>
+            )}
 
-          {estoqueBaixo.data?.produtos.map((produto) => (
-            <Link
-              key={produto.id}
-              to={`/produtos/${produto.id}`}
-              className="flex items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-muted"
-            >
-              <span className="font-medium">{produto.nome}</span>
-              <span className="text-destructive">
-                {produto.quantidadeAtual} / {produto.estoqueMinimo} {produto.unidadeMedida}
-              </span>
-            </Link>
-          ))}
-        </CardContent>
-      </Card>
+            {estoqueBaixo.data?.produtos.map((produto) => (
+              <Link
+                key={produto.id}
+                to={`/produtos/${produto.id}`}
+                className="flex items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-muted"
+              >
+                <span className="font-medium">{produto.nome}</span>
+                <span className="text-destructive">
+                  {produto.quantidadeAtual} / {produto.estoqueMinimo} {produto.unidadeMedida}
+                </span>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Mais vendidos (30 dias)</CardTitle>
+            <Button asChild variant="link" size="sm" className="text-brand">
+              <Link to="/vendas">Ver vendas</Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            {maisVendidos.isLoading && <Skeleton className="h-24 w-full" />}
+
+            {maisVendidos.isError && <ErrorState onRetry={() => maisVendidos.refetch()} />}
+
+            {!maisVendidos.isLoading && !maisVendidos.isError && maisVendidos.data?.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Nenhuma venda registrada nos últimos {DIAS_MAIS_VENDIDOS} dias.
+              </p>
+            )}
+
+            {maisVendidos.data?.map((produto, indice) => (
+              <Link
+                key={produto.produtoId}
+                to={`/produtos/${produto.produtoId}`}
+                className="flex items-center justify-between rounded-md px-2 py-2 text-sm hover:bg-muted"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+                    {indice + 1}
+                  </span>
+                  <span className="truncate font-medium">{produto.nome}</span>
+                </span>
+                <span className="shrink-0 text-muted-foreground">
+                  {produto.quantidadeVendida} {produto.unidadeMedida}
+                </span>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

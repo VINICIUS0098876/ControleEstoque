@@ -21,6 +21,17 @@ enum Papel {
   FUNCIONARIO
 }
 
+// Forma de pagamento informada no fechamento de uma venda (Venda.formaPagamento). Só um
+// rótulo informativo nesta fase — nenhuma integração real de pagamento (Pix/cartão via
+// gateway) ainda; ver comentário no model Venda. FIADO é a exceção: exige Venda.clienteId
+// (ver CreateVendaService) e é o que alimenta o saldo devedor de Cliente.
+enum FormaPagamento {
+  DINHEIRO
+  PIX
+  CARTAO
+  FIADO
+}
+
 // 1. Tabela da Empresa (O "Tenant")
 model Empresa {
   id      String  @id @default(uuid()) @db.Uuid
@@ -36,10 +47,13 @@ model Empresa {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  usuarios      Usuario[]
-  produtos      Produto[]
-  categorias    Categoria[]
-  movimentacoes Movimentacao[]
+  usuarios       Usuario[]
+  produtos       Produto[]
+  categorias     Categoria[]
+  movimentacoes  Movimentacao[]
+  vendas         Venda[]
+  clientes       Cliente[]
+  pagamentosFiado PagamentoFiado[]
 }
 
 // 2. Tabela de Usuários (Donos e Funcionários)
@@ -53,8 +67,11 @@ model Usuario {
   empresaId String  @db.Uuid
   empresa   Empresa @relation(fields: [empresaId], references: [id])
 
-  refreshTokens RefreshToken[]
-  movimentacoes Movimentacao[]
+  refreshTokens       RefreshToken[]
+  movimentacoes       Movimentacao[]
+  passwordResetTokens PasswordResetToken[]
+  vendas              Venda[]
+  pagamentosFiado     PagamentoFiado[]
 
   // Campos de Soft Delete (Ex: Funcionário foi demitido)
   ativo      Boolean   @default(true)
@@ -92,6 +109,7 @@ model Produto {
   deletadoEm DateTime?
 
   movimentacoes Movimentacao[]
+  itensVenda    ItemVenda[]
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -132,6 +150,117 @@ model Movimentacao {
   @@index([empresaId])
 }
 
+// Tabela de Vendas (PDV): cabeçalho de uma venda, imutável como Movimentacao — não existe
+// update, só criação. Cancelamento/estorno de uma venda fica fora do escopo desta fase.
+model Venda {
+  id             String         @id @default(uuid()) @db.Uuid
+  formaPagamento FormaPagamento
+  // Soma dos itens no momento da venda (quantidade * precoUnitario de cada ItemVenda).
+  // Redundante com a soma dos itens de propósito: evita ter que somar ItemVenda toda vez
+  // que a venda é listada/exibida. Nunca diverge porque Venda é criada com seus itens na
+  // mesma transação (ver CreateVendaService) e nunca é editada depois.
+  total Decimal @db.Decimal(10, 2)
+
+  empresaId String  @db.Uuid
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  // Sempre presente: diferente de Movimentacao.usuarioId (que é opcional para permitir
+  // lançamentos automáticos/futuros via IA), toda venda hoje passa pelo PDV com um
+  // usuário autenticado — não existe fluxo de venda sem operador.
+  usuarioId String  @db.Uuid
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+
+  // Opcional para DINHEIRO/PIX/CARTAO (o PDV hoje só pede cliente quando a forma é
+  // FIADO), mas obrigatório nesse caso — ver o superRefine de createVendaSchema e a
+  // checagem de limite de crédito em CreateVendaService.
+  clienteId String?  @db.Uuid
+  cliente   Cliente? @relation(fields: [clienteId], references: [id])
+
+  itens ItemVenda[]
+
+  criadoEm DateTime @default(now())
+
+  // ListVendaService lista por empresa ordenado por data (e opcionalmente por cliente,
+  // usado na tela de detalhe do cliente); dashboard agrega por dia.
+  @@index([empresaId, criadoEm])
+  @@index([clienteId])
+}
+
+// Item de uma venda. Uma linha por produto (CreateVendaService agrupa quantidades
+// duplicadas do mesmo produto no carrinho antes de gravar), com o preço de venda
+// congelado no momento da compra — segue precoVenda do Produto na hora, não referencia
+// o preço atual dele depois (que pode mudar).
+model ItemVenda {
+  id            String  @id @default(uuid()) @db.Uuid
+  quantidade    Int
+  precoUnitario Decimal @db.Decimal(10, 2)
+
+  vendaId String @db.Uuid
+  venda   Venda  @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+
+  produtoId String  @db.Uuid
+  produto   Produto @relation(fields: [produtoId], references: [id])
+
+  // GetProdutosMaisVendidosService agrupa por produtoId; venda.itens usa o índice de vendaId.
+  @@index([vendaId])
+  @@index([produtoId])
+}
+
+// Cliente da empresa — usado hoje só pra vendas fiado (ver Venda.clienteId), mas cadastro
+// e cliente em si não dependem disso: uma empresa pode cadastrar cliente mesmo sem nunca
+// vender fiado pra ele. Sem CPF/documento nesta fase (fora do escopo de identificação
+// fiscal); nome + telefone bastam pra achar/contatar o cliente sobre o fiado.
+model Cliente {
+  id            String  @id @default(uuid()) @db.Uuid
+  nome          String
+  telefone      String?
+  // Teto de fiado em aberto pro cliente. Nulo = sem limite (fica a critério de quem
+  // vende). Ver checagem em CreateVendaService — soma o saldo devedor atual + o total da
+  // nova venda fiado e compara contra este valor.
+  limiteCredito Decimal? @db.Decimal(10, 2)
+
+  empresaId String  @db.Uuid
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  vendas     Venda[]
+  pagamentos PagamentoFiado[]
+
+  ativo      Boolean   @default(true)
+  deletadoEm DateTime?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // ListClienteService filtra/pagina por empresa+status; busca por nome/telefone.
+  @@index([empresaId, ativo])
+}
+
+// Pagamento que abate o saldo devedor de fiado de um cliente. Histórico imutável, como
+// Movimentacao e Venda — não existe update, só criação (CreatePagamentoFiadoService). O
+// saldo devedor de um cliente nunca é uma coluna própria: é sempre recalculado como
+// SUM(Venda.total WHERE clienteId=X AND formaPagamento=FIADO) - SUM(PagamentoFiado.valor
+// WHERE clienteId=X), pra nunca divergir do histórico real (ver GetClienteService).
+model PagamentoFiado {
+  id    String  @id @default(uuid()) @db.Uuid
+  valor Decimal @db.Decimal(10, 2)
+
+  clienteId String  @db.Uuid
+  cliente   Cliente @relation(fields: [clienteId], references: [id])
+
+  empresaId String  @db.Uuid
+  empresa   Empresa @relation(fields: [empresaId], references: [id])
+
+  usuarioId String  @db.Uuid
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+
+  criadoEm DateTime @default(now())
+
+  // ListPagamentoFiadoService lista por cliente ordenado por data; GetFiadoResumoService
+  // (dashboard) soma por empresa.
+  @@index([clienteId, criadoEm])
+  @@index([empresaId])
+}
+
 // 5. Tabela de Refresh Tokens
 model RefreshToken {
   id        String @id @default(uuid()) @db.Uuid
@@ -143,6 +272,28 @@ model RefreshToken {
   criadoEm DateTime @default(now())
 
   // LoginService/DeleteUserService invalidam tokens de um usuário via deleteMany({usuarioId}).
+  @@index([usuarioId])
+}
+
+// 6. Tabela de Tokens de Redefinição de Senha (fluxo de "esqueci minha senha")
+model PasswordResetToken {
+  id String @id @default(uuid()) @db.Uuid
+
+  // Hash SHA-256 do token enviado por e-mail (ver ForgotPasswordService/ResetPasswordService)
+  // — nunca guardamos o token em texto plano no banco, já que e-mail é um canal menos
+  // confiável que o cookie httpOnly do refresh token (pode ficar em log de servidor de
+  // e-mail, ser encaminhado por engano, etc.). Um vazamento do banco sozinho não é
+  // suficiente para redefinir a senha de ninguém.
+  tokenHash String @unique
+  expiresIn Int // Unix timestamp (segundos), mesma convenção do RefreshToken.
+
+  usuarioId String  @db.Uuid
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  criadoEm DateTime @default(now())
+
+  // ForgotPasswordService invalida (apaga) tokens antigos do usuário antes de criar um
+  // novo, e ResetPasswordService busca sempre por tokenHash.
   @@index([usuarioId])
 }
 

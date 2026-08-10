@@ -2,7 +2,16 @@ import { useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { getMe, login as loginRequest, logout as logoutRequest, type LoginPayload } from "@/api/auth"
+import {
+  getMe,
+  login as loginRequest,
+  logout as logoutRequest,
+  forgotPassword as forgotPasswordRequest,
+  resetPassword as resetPasswordRequest,
+  type LoginPayload,
+  type ForgotPasswordPayload,
+  type ResetPasswordPayload,
+} from "@/api/auth"
 import { getApiErrorMessage } from "@/api/client"
 import { hasSessionHint } from "@/lib/session-hint"
 import { useAuthStore } from "@/stores/auth-store"
@@ -58,6 +67,30 @@ export function useLogout() {
       setEmpresa(null)
       queryClient.clear()
       navigate("/login", { replace: true })
+    },
+  })
+}
+
+export function useForgotPassword() {
+  return useMutation({
+    mutationFn: (payload: ForgotPasswordPayload) => forgotPasswordRequest(payload),
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, "Não foi possível enviar o e-mail de redefinição."))
+    },
+  })
+}
+
+export function useResetPassword() {
+  const navigate = useNavigate()
+
+  return useMutation({
+    mutationFn: (payload: ResetPasswordPayload) => resetPasswordRequest(payload),
+    onSuccess: () => {
+      toast.success("Senha redefinida com sucesso. Faça login com a nova senha.")
+      navigate("/login", { replace: true })
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, "Não foi possível redefinir a senha. Solicite um novo link."))
     },
   })
 }

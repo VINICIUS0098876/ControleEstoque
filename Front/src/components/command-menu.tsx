@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { LayoutDashboard, Package, Tags, Users, UserCircle, Settings, Plus } from "lucide-react"
+import {
+  LayoutDashboard,
+  Package,
+  Tags,
+  Users,
+  UserCircle,
+  Settings,
+  Plus,
+  ShoppingCart,
+  Receipt,
+  Contact,
+} from "lucide-react"
 import {
   CommandDialog,
   CommandEmpty,
@@ -30,8 +41,11 @@ interface AtalhoNavegacao {
 
 const ATALHOS_NAVEGACAO: AtalhoNavegacao[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/pdv", label: "PDV", icon: ShoppingCart },
+  { to: "/vendas", label: "Vendas", icon: Receipt },
   { to: "/produtos", label: "Produtos", icon: Package },
   { to: "/categorias", label: "Categorias", icon: Tags },
+  { to: "/clientes", label: "Clientes", icon: Contact },
   { to: "/usuarios", label: "Usuários", icon: Users, papeisPermitidos: ["ADMIN"] },
   { to: "/configuracoes", label: "Configurações", icon: Settings, papeisPermitidos: ["ADMIN"] },
   { to: "/perfil", label: "Meu perfil", icon: UserCircle },
@@ -47,7 +61,7 @@ export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
   const buscaDebounced = useDebouncedValue(busca, 300)
 
   const { data } = useProdutos(
-    { nome: buscaDebounced || undefined, limit: 6 },
+    { busca: buscaDebounced || undefined, limit: 6 },
     { enabled: open && buscaDebounced.length > 0 }
   )
 
@@ -98,6 +112,10 @@ export function CommandMenu({ open, onOpenChange }: CommandMenuProps) {
         )}
 
         <CommandGroup heading="Ações rápidas">
+          <CommandItem value="nova venda pdv" onSelect={() => irPara("/pdv")}>
+            <ShoppingCart />
+            Nova venda
+          </CommandItem>
           <CommandItem value="cadastrar novo produto" onSelect={() => irPara("/produtos?novo=1")}>
             <Plus />
             Novo produto

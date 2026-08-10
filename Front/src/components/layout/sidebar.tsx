@@ -1,5 +1,17 @@
 import { NavLink } from "react-router-dom"
-import { LayoutDashboard, Package, Tags, Users, UserCircle, LogOut, Search, Settings } from "lucide-react"
+import {
+  LayoutDashboard,
+  Package,
+  Tags,
+  Users,
+  UserCircle,
+  LogOut,
+  Search,
+  Settings,
+  ShoppingCart,
+  Receipt,
+  Contact,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -21,8 +33,11 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/pdv", label: "PDV", icon: ShoppingCart },
+  { to: "/vendas", label: "Vendas", icon: Receipt },
   { to: "/produtos", label: "Produtos", icon: Package },
   { to: "/categorias", label: "Categorias", icon: Tags },
+  { to: "/clientes", label: "Clientes", icon: Contact },
   { to: "/usuarios", label: "Usuários", icon: Users, papeisPermitidos: ["ADMIN"] },
   { to: "/configuracoes", label: "Configurações", icon: Settings, papeisPermitidos: ["ADMIN"] },
 ]

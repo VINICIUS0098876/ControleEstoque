@@ -59,6 +59,11 @@ const authLimiter = rateLimit({
     message: 'Muitas tentativas de autenticação. Por favor, tente novamente em 1 hora.'
 })
 app.use('/user/login', authLimiter)
+// Mesmo limitador do login: /forgot-password evita virar vetor de spam de e-mail (alguém
+// disparando o fluxo repetidamente contra a caixa de entrada de terceiros) e
+// /reset-password evita força bruta contra o token de redefinição.
+app.use('/user/forgot-password', authLimiter)
+app.use('/user/reset-password', authLimiter)
 
 app.use(httpLogger)
 

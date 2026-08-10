@@ -6,6 +6,7 @@ import { Papel } from '@prisma/client'
 import { AppError } from '../utils/AppError.js'
 import { ERROR_INVALID_CREDENTIALS, ERROR_NOT_FOUND, ERROR_REQUIRED_FIELDS } from '../utils/messages.js';
 import { env } from '../conf/env.js'
+import { sendPasswordResetEmail } from './email.js'
 
 interface UpdateUsuario{
     nome: string;
@@ -17,6 +18,23 @@ interface UpdateUsuario{
 // então o resultado nunca esbarra na validação de senha do login/troca.
 function gerarSenhaProvisoria(): string {
     return crypto.randomBytes(9).toString('base64url')
+}
+
+// Tempo de vida do token de "esqueci minha senha" (ver ForgotPasswordService): curto de
+// propósito, já que o link trafega por um canal menos controlado (caixa de e-mail) que o
+// refresh token (cookie httpOnly).
+const PASSWORD_RESET_TOKEN_TTL_SEGUNDOS = 30 * 60
+
+// Token de posse enviado por e-mail para o fluxo de redefinição de senha (ForgotPassword/
+// ResetPasswordService). 32 bytes de entropia — bem mais que a senha provisória acima,
+// porque este token sozinho autoriza a troca de senha, sem precisar da senha antiga.
+function gerarTokenRedefinicaoSenha(): string {
+    return crypto.randomBytes(32).toString('base64url')
+}
+
+// Só o hash do token vai para o banco (ver comentário no schema, model PasswordResetToken).
+function hashTokenRedefinicaoSenha(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex')
 }
 
 interface CreateFuncionario{
@@ -529,6 +547,115 @@ export class AdminResetPasswordService{
         ])
 
         return { ...usuario, senhaProvisoria }
+    }
+}
+
+export class ForgotPasswordService{
+    async execute(email: string, frontendUrl: string){
+        const usuarioExistente = await prismaClient.usuario.findFirst({
+            where: {
+                email: email,
+                ativo: true
+            }
+        })
+
+        // Mesma resposta (nenhuma, aqui — sucesso genérico é responsabilidade do
+        // controller) exista ou não o e-mail: contar quais e-mails têm conta cadastrada
+        // não é informação que essa rota pública deveria vazar (mesmo espírito do
+        // HASH_FANTASMA_TIMING_ATTACK em LoginService, só que via resposta idêntica em
+        // vez de tempo idêntico, já que aqui não há senha pra comparar).
+        if(!usuarioExistente){
+            return
+        }
+
+        // Invalida qualquer token pendente antes de criar um novo, pra nunca existir
+        // mais de um link de redefinição válido ao mesmo tempo para o mesmo usuário.
+        await prismaClient.passwordResetToken.deleteMany({
+            where: {
+                usuarioId: usuarioExistente.id
+            }
+        })
+
+        const token = gerarTokenRedefinicaoSenha()
+        const tokenHash = hashTokenRedefinicaoSenha(token)
+        const expiresIn = Math.floor(Date.now() / 1000) + PASSWORD_RESET_TOKEN_TTL_SEGUNDOS
+
+        await prismaClient.passwordResetToken.create({
+            data: {
+                usuarioId: usuarioExistente.id,
+                tokenHash: tokenHash,
+                expiresIn: expiresIn
+            }
+        })
+
+        const resetUrl = `${frontendUrl}/redefinir-senha?token=${token}`
+
+        await sendPasswordResetEmail(usuarioExistente.email, usuarioExistente.nome, resetUrl)
+    }
+}
+
+export class ResetPasswordService{
+    async execute(token: string, novaSenha: string){
+        const tokenHash = hashTokenRedefinicaoSenha(token)
+
+        const resetToken = await prismaClient.passwordResetToken.findUnique({
+            where: {
+                tokenHash: tokenHash
+            },
+            include: {
+                usuario: true
+            }
+        })
+
+        // Mesma mensagem genérica para "token não existe", "já foi usado" (é apagado no
+        // uso, ver abaixo) e "usuário inativo": não há motivo pra diferenciar esses casos
+        // para quem está tentando redefinir a senha.
+        const MENSAGEM_TOKEN_INVALIDO = 'Link de redefinição inválido ou expirado. Solicite um novo.'
+
+        if(!resetToken || !resetToken.usuario.ativo){
+            throw new AppError(MENSAGEM_TOKEN_INVALIDO, 400)
+        }
+
+        const tempoReal = Math.floor(Date.now() / 1000)
+
+        if(resetToken.expiresIn < tempoReal){
+            await prismaClient.passwordResetToken.delete({
+                where: {
+                    id: resetToken.id
+                }
+            })
+
+            throw new AppError(MENSAGEM_TOKEN_INVALIDO, 400)
+        }
+
+        const senhaCriptografada = await bcrypt.hash(novaSenha, 10)
+
+        // Troca a senha, consome o token (uso único) e invalida as sessões ativas na
+        // mesma transação — mesmo raciocínio do AdminResetPasswordService: quem estiver
+        // logado com a senha antiga é deslogado.
+        await prismaClient.$transaction([
+            prismaClient.passwordResetToken.delete({
+                where: {
+                    id: resetToken.id
+                }
+            }),
+            prismaClient.refreshToken.deleteMany({
+                where: {
+                    usuarioId: resetToken.usuarioId
+                }
+            }),
+            prismaClient.usuario.update({
+                where: {
+                    id: resetToken.usuarioId
+                },
+                data: {
+                    senha: senhaCriptografada
+                },
+                select: {
+                    id: true
+                }
+            })
+        ])
     }
 }
 

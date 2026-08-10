@@ -77,3 +77,24 @@ export const loginUsuarioSchema = z.object({
         .min(1, { message: "A senha é obrigatória." }),
     })
 });
+
+export const forgotPasswordSchema = z.object({
+    body: z.object({
+        email: z
+        .string({ message: "O email é obrigatório." })
+        .email({ message: "Insira um formato de e-mail válido." }),
+    })
+});
+
+export const resetPasswordSchema = z.object({
+    body: z.object({
+        token: z
+        .string({ message: "O token de redefinição é obrigatório." })
+        .min(1, { message: "O token de redefinição é obrigatório." }),
+
+        senha: z
+        .string({ message: "A nova senha é obrigatória." })
+        .min(6, { message: "A senha deve ter no mínimo 6 caracteres." })
+        .max(255, { message: "A senha excedeu o limite de caracteres." }),
+    })
+});

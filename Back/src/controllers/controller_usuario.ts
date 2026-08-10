@@ -13,7 +13,9 @@ DeactivateUserService,
 ReactivateUserService,
 RefreshTokenService,
 AdminUpdateUsuarioService,
-AdminResetPasswordService
+AdminResetPasswordService,
+ForgotPasswordService,
+ResetPasswordService
 } from '../services/usuario.js'
 import {
   ERROR_UNAUTHENTICATED,
@@ -22,8 +24,12 @@ import {
   SUCCESS_LOGIN_ITEM,
   SUCCESS_UPDATED_ITEM,
   SUCCESS_PASSWORD_RESET,
+  SUCCESS_PASSWORD_RESET_REQUESTED,
 } from "../utils/messages.js";
 import { setAuthCookies, clearAuthCookies } from '../utils/cookies.js'
+import { env } from '../conf/env.js'
+
+const DEFAULT_FRONTEND_URL = 'http://localhost:5173'
 
 
 
@@ -240,6 +246,41 @@ export class AdminUpdateUsuarioController {
             const usuario = await adminUpdateUsuarioService.execute(id, empresaId, {nome, email})
 
             return res.status(200).json({message: SUCCESS_UPDATED_ITEM.message, usuario})
+        } catch (error) {
+            next(error)
+        }
+    }
+}
+
+export class ForgotPasswordController {
+    async handle(req: Request, res: Response, next: NextFunction) {
+        try{
+            const {email} = req.body
+
+            const forgotPasswordService = new ForgotPasswordService()
+
+            await forgotPasswordService.execute(email, env.FRONTEND_URL ?? DEFAULT_FRONTEND_URL)
+
+            // Sempre 200 com a mesma mensagem, exista ou não o e-mail (ver
+            // ForgotPasswordService) — quem está tentando adivinhar e-mails cadastrados
+            // não pode diferenciar os dois casos pela resposta.
+            return res.status(200).json({message: SUCCESS_PASSWORD_RESET_REQUESTED.message})
+        } catch (error) {
+            next(error)
+        }
+    }
+}
+
+export class ResetPasswordController {
+    async handle(req: Request, res: Response, next: NextFunction) {
+        try{
+            const {token, senha} = req.body
+
+            const resetPasswordService = new ResetPasswordService()
+
+            await resetPasswordService.execute(token, senha)
+
+            return res.status(200).json({message: SUCCESS_PASSWORD_RESET.message})
         } catch (error) {
             next(error)
         }

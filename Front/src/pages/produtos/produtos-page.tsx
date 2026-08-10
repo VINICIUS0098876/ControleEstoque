@@ -99,7 +99,7 @@ export function ProdutosPage() {
   useDocumentTitle("Produtos")
 
   const [busca, setBusca] = useState("")
-  const nomeFiltro = useDebouncedValue(busca, 400)
+  const buscaFiltro = useDebouncedValue(busca, 400)
   const [categoriaId, setCategoriaId] = useState<string>(TODAS_CATEGORIAS)
   const [estoqueBaixo, setEstoqueBaixo] = useState(false)
   const [page, setPage] = useState(1)
@@ -109,11 +109,11 @@ export function ProdutosPage() {
   })
   const { sortBy, sortOrder } = ordenacao
 
-  const semFiltrosAtivos = !nomeFiltro && categoriaId === TODAS_CATEGORIAS && !estoqueBaixo
+  const semFiltrosAtivos = !buscaFiltro && categoriaId === TODAS_CATEGORIAS && !estoqueBaixo
 
   const { data: categorias } = useCategorias()
   const { data, isLoading, isError, refetch, isPlaceholderData } = useProdutos({
-    nome: nomeFiltro || undefined,
+    busca: buscaFiltro || undefined,
     categoriaId: categoriaId === TODAS_CATEGORIAS ? undefined : categoriaId,
     estoqueBaixo,
     page,
@@ -354,7 +354,7 @@ export function ProdutosPage() {
         <div className="relative w-64">
           <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Buscar por nome..."
+            placeholder="Buscar por nome, SKU ou código de barras..."
             value={busca}
             onChange={(e) => {
               setBusca(e.target.value)

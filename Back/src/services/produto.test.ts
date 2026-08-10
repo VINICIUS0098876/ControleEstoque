@@ -7,10 +7,12 @@ const prismaMock = {
     produto: {
         findFirst: vi.fn(),
         findMany: vi.fn(),
+        count: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
     },
     $queryRaw: vi.fn(),
+    $transaction: vi.fn(),
 }
 
 vi.mock('../conf/prisma.js', () => ({
@@ -35,6 +37,9 @@ function criarPayload(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
     vi.clearAllMocks()
+    // $transaction em array-form (caminho padrão de ListProdutoService, fora do
+    // filtro estoqueBaixo) só resolve as promises já criadas pelas chamadas passadas a ele.
+    prismaMock.$transaction.mockImplementation((ops: Promise<unknown>[]) => Promise.all(ops))
 })
 
 describe('CreateProdutoService', () => {
@@ -213,5 +218,29 @@ describe('ListProdutoService — filtro estoqueBaixo', () => {
                 _count: { select: { movimentacoes: true } },
             },
         })
+    })
+})
+
+describe('ListProdutoService — filtro busca', () => {
+    it('busca por nome, SKU ou código de barras (OR) — necessário pro PDV achar produto por código escaneado', async () => {
+        prismaMock.produto.findMany.mockResolvedValue([])
+        prismaMock.produto.count.mockResolvedValue(0)
+
+        const service = new ListProdutoService()
+        await service.execute(empresaId, { busca: '789123' })
+
+        expect(prismaMock.produto.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: {
+                    empresaId,
+                    ativo: true,
+                    OR: [
+                        { nome: { contains: '789123', mode: 'insensitive' } },
+                        { sku: { contains: '789123', mode: 'insensitive' } },
+                        { codigoBarras: { contains: '789123', mode: 'insensitive' } },
+                    ],
+                },
+            })
+        )
     })
 })

@@ -76,6 +76,96 @@ export interface ProdutosResponse {
   totalPages: number
 }
 
+export type FormaPagamento = "DINHEIRO" | "PIX" | "CARTAO" | "FIADO"
+
+export interface ItemVenda {
+  id: string
+  quantidade: number
+  precoUnitario: string
+  produtoId: string
+  produto?: { nome: string; sku: string | null; unidadeMedida: string } | null
+}
+
+export interface Venda {
+  id: string
+  formaPagamento: FormaPagamento
+  total: string
+  empresaId: string
+  usuarioId: string
+  usuario?: { nome: string } | null
+  clienteId?: string | null
+  cliente?: { nome: string; telefone: string | null } | null
+  itens?: ItemVenda[]
+  _count?: { itens: number }
+  criadoEm: string
+}
+
+export interface VendasResponse {
+  vendas: Venda[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface FaturamentoPorDia {
+  data: string
+  total: number
+}
+
+export interface ResumoVendas {
+  faturamentoHoje: number
+  quantidadeVendasHoje: number
+  tendenciaFaturamento: FaturamentoPorDia[]
+}
+
+export interface VendaPorDia {
+  data: string
+  total: number
+  quantidade: number
+}
+
+export interface ProdutoMaisVendido {
+  produtoId: string
+  nome: string
+  unidadeMedida: string
+  quantidadeVendida: number
+  faturamento: number
+}
+
+export interface Cliente {
+  id: string
+  nome: string
+  telefone: string | null
+  limiteCredito: string | null
+  saldoDevedor?: number
+  empresaId?: string
+  ativo?: boolean
+  criadoEm?: string
+}
+
+export interface ClientesResponse {
+  clientes: Cliente[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export interface PagamentoFiado {
+  id: string
+  valor: string
+  clienteId: string
+  usuarioId: string
+  usuario?: { nome: string } | null
+  criadoEm: string
+  saldoDevedor?: number
+}
+
+export interface ResumoFiado {
+  totalReceber: number
+}
+
 export interface ApiErrorResponse {
   message: string
   errors?: { field: string; message: string }[]

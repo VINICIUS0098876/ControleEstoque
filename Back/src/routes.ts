@@ -1,9 +1,9 @@
 import {Router} from 'express'
-import {CreateUsuarioController, UpdateUsuarioController, DeleteUsuarioController, GetUsuarioController, ListUsuarioController, PatchPasswordController, LoginUsuarioController, LogoutUsuarioController, RefreshTokenController, DeactivateUsuarioController, ReactivateUsuarioController, AdminUpdateUsuarioController, AdminResetPasswordController} from './controllers/controller_usuario.js'
+import {CreateUsuarioController, UpdateUsuarioController, DeleteUsuarioController, GetUsuarioController, ListUsuarioController, PatchPasswordController, LoginUsuarioController, LogoutUsuarioController, RefreshTokenController, DeactivateUsuarioController, ReactivateUsuarioController, AdminUpdateUsuarioController, AdminResetPasswordController, ForgotPasswordController, ResetPasswordController} from './controllers/controller_usuario.js'
 import {CreateEmpresaController, UpdateEmpresaController, DeleteEmpresaController, GetEmpresaController} from './controllers/controller_empresa.js'
 import { validate } from './middlewares/validate.js'
 import { createEmpresaSchema, updateEmpresaSchema } from './schema/empresa.schema.js'
-import { createUserSchema, usuarioIdParamSchema, updateUsuarioSchema, adminUpdateUsuarioSchema, patchPasswordSchema, loginUsuarioSchema } from './schema/usuario.schema.js'
+import { createUserSchema, usuarioIdParamSchema, updateUsuarioSchema, adminUpdateUsuarioSchema, patchPasswordSchema, loginUsuarioSchema, forgotPasswordSchema, resetPasswordSchema } from './schema/usuario.schema.js'
 import { authMiddleware } from './middlewares/middlewareAuth.js'
 import { requireRole } from './middlewares/middlewareRole.js'
 import { CreateCategoriaController, DeleteCategoriaController, GetCategoriaController, ListCategoriaController, UpdateCategoriaController } from './controllers/controller_categoria.js'
@@ -12,7 +12,13 @@ import { CreateProdutoController, DeleteProdutoController, GetProdutoController,
 import { createProdutoSchema, updateProdutoSchema, produtoIdParamSchema, listProdutoQuerySchema } from './schema/produto.schema.js'
 import { CreateMovimentacaoController, ListMovimentacaoController } from './controllers/controller_movimentacao.js'
 import { createMovimentacaoSchema } from './schema/movimentacao.schema.js'
-import { GetResumoEstoqueController, GetMovimentacoesPorDiaController } from './controllers/controller_dashboard.js'
+import { CreateVendaController, ListVendaController, GetVendaController } from './controllers/controller_venda.js'
+import { createVendaSchema, listVendaQuerySchema, vendaIdParamSchema } from './schema/venda.schema.js'
+import { CreateClienteController, UpdateClienteController, DeleteClienteController, GetClienteController, ListClienteController } from './controllers/controller_cliente.js'
+import { createClienteSchema, updateClienteSchema, clienteIdParamSchema, listClienteQuerySchema } from './schema/cliente.schema.js'
+import { CreatePagamentoFiadoController, ListPagamentoFiadoController } from './controllers/controller_pagamento_fiado.js'
+import { createPagamentoFiadoSchema } from './schema/pagamento-fiado.schema.js'
+import { GetResumoEstoqueController, GetMovimentacoesPorDiaController, GetVendasResumoController, GetVendasPorDiaController, GetProdutosMaisVendidosController, GetFiadoResumoController } from './controllers/controller_dashboard.js'
 
 
 
@@ -29,6 +35,8 @@ const reactivateUsuarioController = new ReactivateUsuarioController()
 const listUsuarioController = new ListUsuarioController()
 const adminUpdateUsuarioController = new AdminUpdateUsuarioController()
 const adminResetPasswordController = new AdminResetPasswordController()
+const forgotPasswordController = new ForgotPasswordController()
+const resetPasswordController = new ResetPasswordController()
 
 
 const createEmpresaController = new CreateEmpresaController()
@@ -52,8 +60,25 @@ const listProdutosController = new ListProdutoController()
 const createMovimentacaoController = new CreateMovimentacaoController()
 const listMovimentacaoController = new ListMovimentacaoController()
 
+const createVendaController = new CreateVendaController()
+const listVendaController = new ListVendaController()
+const getVendaController = new GetVendaController()
+
+const createClienteController = new CreateClienteController()
+const updateClienteController = new UpdateClienteController()
+const deleteClienteController = new DeleteClienteController()
+const getClienteController = new GetClienteController()
+const listClienteController = new ListClienteController()
+
+const createPagamentoFiadoController = new CreatePagamentoFiadoController()
+const listPagamentoFiadoController = new ListPagamentoFiadoController()
+
 const getResumoEstoqueController = new GetResumoEstoqueController()
 const getMovimentacoesPorDiaController = new GetMovimentacoesPorDiaController()
+const getVendasResumoController = new GetVendasResumoController()
+const getVendasPorDiaController = new GetVendasPorDiaController()
+const getProdutosMaisVendidosController = new GetProdutosMaisVendidosController()
+const getFiadoResumoController = new GetFiadoResumoController()
 
 
 
@@ -74,6 +99,11 @@ router.patch('/user/password', authMiddleware, validate(patchPasswordSchema), pa
 router.post('/user/login', validate(loginUsuarioSchema), loginUsuarioController.handle)
 router.post('/user/logout', logoutUsuarioController.handle)
 router.post('/user/refresh', refreshTokenController.handle)
+// Autoatendimento para quem esqueceu a senha (sem estar autenticado, ao contrário de
+// PATCH /user/password, que exige a senha antiga). Ambas sob o mesmo authLimiter do login
+// (ver server.ts), pra não virarem um vetor de spam de e-mail nem de força bruta de token.
+router.post('/user/forgot-password', validate(forgotPasswordSchema), forgotPasswordController.handle)
+router.post('/user/reset-password', validate(resetPasswordSchema), resetPasswordController.handle)
 router.patch('/user/:id/deactivate', authMiddleware, requireRole('ADMIN'), validate(usuarioIdParamSchema), deactivateUsuarioController.handle)
 router.patch('/user/:id/reactivate', authMiddleware, requireRole('ADMIN'), validate(usuarioIdParamSchema), reactivateUsuarioController.handle)
 // Edição de dados de outro usuário da própria empresa, restrita a ADMIN — distinta de
@@ -109,7 +139,30 @@ router.get('/produtos', authMiddleware, validate(listProdutoQuerySchema), listPr
 router.post('/produto/:id/movimentacao', authMiddleware, validate(createMovimentacaoSchema), createMovimentacaoController.handle)
 router.get('/produto/:id/movimentacoes', authMiddleware, validate(produtoIdParamSchema), listMovimentacaoController.handle)
 
+// Sem requireRole de propósito, igual produto/categoria: um FUNCIONARIO opera o PDV no
+// dia a dia tanto quanto um ADMIN — a baixa de estoque de cada venda acontece dentro de
+// CreateVendaService, na mesma transação que cria a venda (ver comentário lá).
+router.post('/venda', authMiddleware, validate(createVendaSchema), createVendaController.handle)
+router.get('/vendas', authMiddleware, validate(listVendaQuerySchema), listVendaController.handle)
+router.get('/venda/:id', authMiddleware, validate(vendaIdParamSchema), getVendaController.handle)
+
+// Sem requireRole, mesmo raciocínio de produto/categoria: FUNCIONARIO cadastra cliente e
+// registra pagamento de fiado no dia a dia, sem depender de um ADMIN pra isso.
+router.post('/cliente', authMiddleware, validate(createClienteSchema), createClienteController.handle)
+router.put('/cliente/:id', authMiddleware, validate(updateClienteSchema), updateClienteController.handle)
+router.delete('/cliente/:id', authMiddleware, validate(clienteIdParamSchema), deleteClienteController.handle)
+router.get('/cliente/:id', authMiddleware, validate(clienteIdParamSchema), getClienteController.handle)
+router.get('/clientes', authMiddleware, validate(listClienteQuerySchema), listClienteController.handle)
+
+// Saldo devedor de fiado só muda via pagamento (histórico imutável, como Movimentacao).
+router.post('/cliente/:id/pagamento', authMiddleware, validate(createPagamentoFiadoSchema), createPagamentoFiadoController.handle)
+router.get('/cliente/:id/pagamentos', authMiddleware, validate(clienteIdParamSchema), listPagamentoFiadoController.handle)
+
 router.get('/dashboard/resumo', authMiddleware, getResumoEstoqueController.handle)
 router.get('/dashboard/movimentacoes-por-dia', authMiddleware, getMovimentacoesPorDiaController.handle)
+router.get('/dashboard/vendas-resumo', authMiddleware, getVendasResumoController.handle)
+router.get('/dashboard/vendas-por-dia', authMiddleware, getVendasPorDiaController.handle)
+router.get('/dashboard/produtos-mais-vendidos', authMiddleware, getProdutosMaisVendidosController.handle)
+router.get('/dashboard/fiado-resumo', authMiddleware, getFiadoResumoController.handle)
 
 export default router

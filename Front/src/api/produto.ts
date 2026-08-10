@@ -2,7 +2,10 @@ import { api } from "@/api/client"
 import type { Produto, ProdutosResponse, ProdutoOrdenavel, OrdemClassificacao } from "@/types"
 
 export interface ListProdutosParams {
-  nome?: string
+  // Casa contra nome, SKU e código de barras (ver Back ListProdutoService) — o mesmo
+  // parâmetro serve a busca por nome da tela de Produtos e a busca do PDV por código
+  // escaneado/SKU.
+  busca?: string
   categoriaId?: string
   estoqueBaixo?: boolean
   page?: number

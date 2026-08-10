@@ -88,12 +88,12 @@ export class ListProdutoController{
     async handle(req: AuthRequest, res: Response, next: NextFunction){
         try{
             const empresaId = req.empresaId as string
-            const { nome, categoriaId, estoqueBaixo, page, limit, sortBy, sortOrder } = req.query
+            const { busca, categoriaId, estoqueBaixo, page, limit, sortBy, sortOrder } = req.query
 
             const listProdutoService = new ListProdutoService()
 
             const resultado = await listProdutoService.execute(empresaId, {
-                nome: nome as string | undefined,
+                busca: busca as string | undefined,
                 categoriaId: categoriaId as string | undefined,
                 estoqueBaixo: estoqueBaixo === 'true',
                 page: page ? Number(page) : undefined,
